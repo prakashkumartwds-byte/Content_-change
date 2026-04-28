@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       "/api": {
-        target: "http://localhost:5000",
+        target: "https://content-change.onrender.com",
         changeOrigin: true,
         timeout: 120000,
         proxyTimeout: 120000,

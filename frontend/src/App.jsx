@@ -1,7 +1,8 @@
-import { useState, useRef } from "react";
-import { useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import "./App.css";
+
+const API_BASE = "https://content-change.onrender.com";
 
 const EXAMPLES = [
   "Make all text formal and professional",
@@ -48,6 +49,7 @@ export default function App() {
           .filter(Boolean).length
       );
     }, 0);
+
   useEffect(() => {
     if (!htmlInput.trim()) {
       setWordCount(0);
@@ -57,7 +59,7 @@ export default function App() {
 
     const delayDebounce = setTimeout(async () => {
       try {
-        const res = await axios.post("/api/preview", {
+        const res = await axios.post(`${API_BASE}/api/preview`, {
           html: htmlInput,
         });
 
@@ -67,10 +69,11 @@ export default function App() {
       } catch (e) {
         console.error("Auto preview error:", e.message);
       }
-    }, 500); // debounce
+    }, 500);
 
     return () => clearTimeout(delayDebounce);
   }, [htmlInput]);
+
   const resetInputMeta = () => {
     setTextNodeCount(null);
     setTextNodes([]);
@@ -91,7 +94,10 @@ export default function App() {
     setPreviewing(true);
 
     try {
-      const res = await axios.post("/api/preview", { html: htmlInput });
+      const res = await axios.post(`${API_BASE}/api/preview`, {
+        html: htmlInput,
+      });
+
       const nodes = res.data.textNodes || [];
       const wc = res.data.wordCount ?? countWords(nodes);
 
@@ -122,11 +128,11 @@ export default function App() {
 
     try {
       const res = await axios.post(
-        "/api/rewrite",
+        `${API_BASE}/api/rewrite`,
         getPayload({
           html: htmlInput,
           instruction: finalInstruction,
-        }),
+        })
       );
 
       setOutputHtml(res.data.html || res.data.updatedHtml || "");
@@ -156,7 +162,10 @@ export default function App() {
       let nodes = textNodes;
 
       if (!nodes.length) {
-        const pr = await axios.post("/api/preview", { html: htmlInput });
+        const pr = await axios.post(`${API_BASE}/api/preview`, {
+          html: htmlInput,
+        });
+
         nodes = pr.data.textNodes || [];
         setTextNodes(nodes);
         setTextNodeCount(pr.data.count);
@@ -168,11 +177,11 @@ export default function App() {
         "Improve all visible text. Keep meaning the same, make it clean and professional.";
 
       const res = await axios.post(
-        "/api/content-only",
+        `${API_BASE}/api/content-only`,
         getPayload({
           html: htmlInput,
           instruction: finalInstruction,
-        }),
+        })
       );
 
       setReplacements(res.data.replacements || []);
@@ -191,7 +200,7 @@ export default function App() {
     setLoadingDownload(true);
 
     try {
-      const res = await axios.post("/api/download", {
+      const res = await axios.post(`${API_BASE}/api/download`, {
         html: htmlInput,
         replacements,
       });
