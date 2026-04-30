@@ -7,8 +7,6 @@ const BLOCKED_TAGS = new Set([
   "template",
   "meta",
   "link",
-  "head",
-  // ✅ "title" HATAYA — ab <title> tag ka text bhi extract hoga
   "svg",
   "canvas",
   "iframe",
@@ -21,46 +19,56 @@ function countWords(text = "") {
 }
 
 function extractTextNodes(html = "") {
-  const $ = cheerio.load(html, { decodeEntities: false }, false);
+  const $ = cheerio.load(String(html), {
+    decodeEntities: false,
+  });
 
   const textNodes = [];
   let idCounter = 0;
+
+  function addNode(text, setter) {
+    const clean = String(text || "").trim();
+
+    if (clean.length > 1) {
+      const id = `node-${idCounter++}`;
+      setter(`__WCID_${id}__`);
+      textNodes.push({ id, text: clean });
+    }
+  }
 
   function walk(el) {
     $(el)
       .contents()
       .each(function () {
         if (this.type === "text") {
-          const originalText = this.data || "";
-          const trimmedText = originalText.trim();
+          addNode(this.data, (marker) => {
+            this.data = marker;
+          });
+        }
 
-          if (trimmedText.length > 1) {
-            const id = `node-${idCounter++}`;
-            this.data = `__WCID_${id}__`;
-            textNodes.push({ id, text: trimmedText });
-          }
-        } else if (this.type === "tag") {
+        if (this.type === "tag") {
           const tagName = (this.name || "").toLowerCase();
 
-          if (!BLOCKED_TAGS.has(tagName)) {
-            // ✅ Alt attribute extract karo
-            const altText = $(this).attr("alt");
-            if (typeof altText === "string" && altText.trim().length > 1) {
-              const id = `node-${idCounter++}`;
-              $(this).attr("alt", `__WCID_${id}__`);
-              textNodes.push({ id, text: altText.trim() });
-            }
+          // ❌ Important: DO NOT block head/meta/link now
+          if (BLOCKED_TAGS.has(tagName)) return;
 
-            // ✅ Title attribute extract karo (tooltip wala, <title> tag nahi)
-            const titleAttr = $(this).attr("title");
-            if (typeof titleAttr === "string" && titleAttr.trim().length > 1) {
-              const id = `node-${idCounter++}`;
-              $(this).attr("title", `__WCID_${id}__`);
-              textNodes.push({ id, text: titleAttr.trim() });
-            }
-
-            walk(this);
+          // ALT extract
+          const altText = $(this).attr("alt");
+          if (typeof altText === "string") {
+            addNode(altText, (marker) => {
+              $(this).attr("alt", marker);
+            });
           }
+
+          // TITLE attr extract (tooltip)
+          const titleAttr = $(this).attr("title");
+          if (typeof titleAttr === "string") {
+            addNode(titleAttr, (marker) => {
+              $(this).attr("title", marker);
+            });
+          }
+
+          walk(this);
         }
       });
   }
@@ -78,28 +86,17 @@ function escapeHtmlText(text = "") {
     .replace(/>/g, "&gt;");
 }
 
-function removeWrapperTags(html = "") {
-  return String(html)
-    .replace(/<html[^>]*>/gi, "")
-    .replace(/<\/html>/gi, "")
-    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "")
-    .replace(/<head[^>]*>/gi, "")
-    .replace(/<\/head>/gi, "")
-    .replace(/<body[^>]*>/gi, "")
-    .replace(/<\/body>/gi, "")
-    .trim();
-}
-
 function applyReplacements($, replacements = []) {
   const map = {};
 
   for (const r of replacements) {
-    if (r && r.id && typeof r.text === "string") {
+    if (r && typeof r.id === "string" && typeof r.text === "string") {
       map[r.id] = r.text;
     }
   }
 
-  let output = $.root().html() || "";
+  // ✅ FULL HTML preserve (VERY IMPORTANT FIX)
+  let output = $.html();
 
   for (const [id, text] of Object.entries(map)) {
     output = output
@@ -107,11 +104,10 @@ function applyReplacements($, replacements = []) {
       .join(escapeHtmlText(text));
   }
 
-  // ✅ Leftover markers hatao — alt/title markers bhi
+  // remove leftover markers
   output = output.replace(/__WCID_node-\d+__/g, "");
-  output = removeWrapperTags(output);
 
-  return output;
+  return output.trim();
 }
 
 module.exports = {
