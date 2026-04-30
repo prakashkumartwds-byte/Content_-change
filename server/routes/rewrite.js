@@ -4,25 +4,22 @@ const router = express.Router();
 const {
   extractTextNodes,
   applyReplacements,
+  countWords,
 } = require("../utils/htmlProcessor");
 
 const {
   getContentReplacements,
 } = require("../utils/openaiHelper");
 
-function countWordsFromText(text = "") {
-  return String(text).trim().split(/\s+/).filter(Boolean).length;
-}
-
 function countWordsFromNodes(nodes = []) {
   return nodes.reduce((total, node) => {
-    return total + countWordsFromText(node.text);
+    return total + countWords(node.text);
   }, 0);
 }
 
 function countWordsFromReplacements(replacements = []) {
   return replacements.reduce((total, item) => {
-    return total + countWordsFromText(item.text);
+    return total + countWords(item.text);
   }, 0);
 }
 
@@ -41,33 +38,33 @@ async function generateUpdatedHtml({
       replacements: [],
       count: 0,
       wordCount: 0,
+      originalWordCount: 0,
       textNodes: [],
     };
   }
 
-  // ✅ IMPORTANT: send ALL text nodes together
-  // ❌ No chunking here
+  const originalWordCount = countWordsFromNodes(textNodes);
+
   const replacements = await getContentReplacements({
-    instruction,
     textNodes,
+    instruction,
     keyword,
-    keywordCount,
-    targetWords,
+    keywordCount: Number(keywordCount || 0),
+    targetWords: Number(targetWords || 0),
   });
 
   const updatedHtml = applyReplacements($, replacements);
-  const wordCount = countWordsFromReplacements(replacements);
 
   return {
     updatedHtml,
     replacements,
     count: replacements.length,
-    wordCount,
+    wordCount: countWordsFromReplacements(replacements),
+    originalWordCount,
     textNodes,
   };
 }
 
-// POST /api/preview
 router.post("/preview", async (req, res) => {
   try {
     const { html } = req.body;
@@ -97,16 +94,9 @@ router.post("/preview", async (req, res) => {
   }
 });
 
-// POST /api/rewrite
 router.post("/rewrite", async (req, res) => {
   try {
-    const {
-      html,
-      instruction,
-      keyword,
-      keywordCount,
-      targetWords,
-    } = req.body;
+    const { html, instruction, keyword, keywordCount, targetWords } = req.body;
 
     if (!html) {
       return res.status(400).json({
@@ -115,13 +105,11 @@ router.post("/rewrite", async (req, res) => {
       });
     }
 
-    const finalInstruction =
-      instruction ||
-      "Improve all visible text. Keep meaning the same, make it clean and professional.";
-
     const result = await generateUpdatedHtml({
       html,
-      instruction: finalInstruction,
+      instruction:
+        instruction ||
+        "Improve all visible text. Keep meaning same, make it clean and professional.",
       keyword,
       keywordCount,
       targetWords,
@@ -133,6 +121,7 @@ router.post("/rewrite", async (req, res) => {
       updatedHtml: result.updatedHtml,
       replacements: result.replacements,
       count: result.count,
+      originalWordCount: result.originalWordCount,
       wordCount: result.wordCount,
     });
   } catch (err) {
@@ -145,16 +134,9 @@ router.post("/rewrite", async (req, res) => {
   }
 });
 
-// POST /api/content-only
 router.post("/content-only", async (req, res) => {
   try {
-    const {
-      html,
-      instruction,
-      keyword,
-      keywordCount,
-      targetWords,
-    } = req.body;
+    const { html, instruction, keyword, keywordCount, targetWords } = req.body;
 
     if (!html) {
       return res.status(400).json({
@@ -163,13 +145,11 @@ router.post("/content-only", async (req, res) => {
       });
     }
 
-    const finalInstruction =
-      instruction ||
-      "Improve all visible text. Keep meaning the same, make it clean and professional.";
-
     const result = await generateUpdatedHtml({
       html,
-      instruction: finalInstruction,
+      instruction:
+        instruction ||
+        "Improve all visible text. Keep meaning same, make it clean and professional.",
       keyword,
       keywordCount,
       targetWords,
@@ -181,6 +161,7 @@ router.post("/content-only", async (req, res) => {
       updatedHtml: result.updatedHtml,
       replacements: result.replacements,
       count: result.count,
+      originalWordCount: result.originalWordCount,
       wordCount: result.wordCount,
     });
   } catch (err) {
@@ -193,7 +174,6 @@ router.post("/content-only", async (req, res) => {
   }
 });
 
-// POST /api/download
 router.post("/download", async (req, res) => {
   try {
     const { html, replacements } = req.body;
