@@ -1,115 +1,102 @@
-const cheerio = require("cheerio");
+const OpenAI = require("openai");
 
-const BLOCKED_TAGS = new Set([
-  "script",
-  "style",
-  "noscript",
-  "template",
-  "meta",
-  "link",
-  "head",
-  "title",
-  "svg",
-  "canvas",
-  "iframe",
-  "object",
-  "embed",
-]);
-
-function countWords(text = "") {
-  return String(text).trim().split(/\s+/).filter(Boolean).length;
+if (!process.env.OPENAI_API_KEY) {
+  console.warn("⚠️ OPENAI_API_KEY is missing in .env");
 }
 
-function extractTextNodes(html = "") {
-  const $ = cheerio.load(html, { decodeEntities: false }, false);
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
-  const textNodes = [];
-  let idCounter = 0;
+async function getContentReplacements({
+  textNodes = [],
+  instruction = "",
+  keyword = "",
+  keywordCount = 0,
+  targetWords = 0,
+}) {
+  if (!Array.isArray(textNodes) || textNodes.length === 0) return [];
 
-  function walk(el) {
-    $(el)
-      .contents()
-      .each(function () {
-        if (this.type === "text") {
-          const originalText = this.data || "";
-          const trimmedText = originalText.trim();
+  const nodesJson = JSON.stringify(
+    textNodes.map((n) => ({
+      id: String(n.id),
+      text: String(n.text || ""),
+    }))
+  );
 
-          if (trimmedText.length > 1) {
-            const id = `node-${idCounter++}`;
+  let systemPrompt = `You are an expert HTML content rewriter.
 
-            // 🔥 no extra span, just marker
-            this.data = `__WCID_${id}__`;
+You will receive a JSON array of text nodes extracted from a webpage.
+Each node has an "id" and "text" field.
 
-            textNodes.push({
-              id,
-              text: trimmedText,
-            });
-          }
-        } else if (this.type === "tag") {
-          const tagName = (this.name || "").toLowerCase();
+Your job:
+Rewrite only the "text" value of every node according to the instruction.
 
-          if (!BLOCKED_TAGS.has(tagName)) {
-            walk(this);
-          }
-        }
-      });
+Rules:
+- Return ONLY valid JSON.
+- Return ONLY a JSON array.
+- No markdown.
+- No explanation.
+- No code blocks.
+- Every object must have "id" and "text".
+- Keep every "id" unchanged.
+- Do NOT add HTML tags.
+- Return the same number of nodes as input.`;
+
+  if (keyword && Number(keywordCount) > 0) {
+    systemPrompt += `\n- Naturally include keyword "${keyword}" exactly ${Number(
+      keywordCount
+    )} times across all rewritten text combined.`;
   }
 
-  walk($.root());
-
-  return {
-    $,
-    textNodes,
-  };
-}
-
-function cleanAIText(text = "") {
-  return String(text)
-    // ❌ remove ALL tags from AI
-    .replace(/<\/?[^>]+>/g, "")
-    // normalize spacing
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function removeWrapperTags(html = "") {
-  return String(html)
-    .replace(/<html[^>]*>/gi, "")
-    .replace(/<\/html>/gi, "")
-    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "")
-    .replace(/<body[^>]*>/gi, "")
-    .replace(/<\/body>/gi, "")
-    .replace(/<br\s*\/?>/gi, "") // remove <br>
-    .trim();
-}
-
-function applyReplacements($, replacements = []) {
-  const map = {};
-
-  for (const r of replacements) {
-    if (r && r.id && typeof r.text === "string") {
-      map[r.id] = cleanAIText(r.text);
-    }
+  if (Number(targetWords) > 0) {
+    systemPrompt += `\n- Total rewritten word count should be approximately ${Number(
+      targetWords
+    )} words.`;
   }
 
-  let output = $.root().html() || "";
+  const userPrompt = `Instruction:
+${instruction || "Improve the text and keep the meaning same."}
 
-  for (const [id, text] of Object.entries(map)) {
-    const marker = `__WCID_${id}__`;
-    output = output.split(marker).join(text);
+Text nodes:
+${nodesJson}
+
+Return only JSON array.`;
+
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    });
+
+    const raw = response.choices?.[0]?.message?.content || "[]";
+
+    const cleaned = raw
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```$/i, "")
+      .trim();
+
+    const parsed = JSON.parse(cleaned);
+
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.filter(
+      (item) =>
+        item &&
+        typeof item.id === "string" &&
+        typeof item.text === "string"
+    );
+  } catch (err) {
+    console.error("OpenAI error:", err);
+    throw new Error("AI rewrite failed: " + (err.message || "Unknown error"));
   }
-
-  // remove leftover markers
-  output = output.replace(/__WCID_node-\d+__/g, "");
-
-  // 🔥 FINAL CLEAN
-  output = removeWrapperTags(output);
-
-  return output;
 }
 
 module.exports = {
-  extractTextNodes,
-  applyReplacements,
-  countWords,
+  getContentReplacements,
 };
