@@ -56,13 +56,11 @@ export default function App() {
       setTextNodeCount(null);
       return;
     }
-
     const delayDebounce = setTimeout(async () => {
       try {
         const res = await axios.post(`${API_BASE}/api/preview`, {
           html: htmlInput,
         });
-
         setTextNodeCount(res.data.count);
         setTextNodes(res.data.textNodes || []);
         setWordCount(res.data.wordCount || 0);
@@ -70,7 +68,6 @@ export default function App() {
         console.error("Auto preview error:", e.message);
       }
     }, 500);
-
     return () => clearTimeout(delayDebounce);
   }, [htmlInput]);
 
@@ -92,15 +89,12 @@ export default function App() {
     if (!htmlInput.trim()) return setError("Please paste some HTML first.");
     setError("");
     setPreviewing(true);
-
     try {
       const res = await axios.post(`${API_BASE}/api/preview`, {
         html: htmlInput,
       });
-
       const nodes = res.data.textNodes || [];
       const wc = res.data.wordCount ?? countWords(nodes);
-
       setTextNodeCount(res.data.count);
       setTextNodes(nodes);
       setWordCount(wc);
@@ -114,27 +108,20 @@ export default function App() {
 
   const handleRewrite = async () => {
     if (!htmlInput.trim()) return setError("Please paste some HTML first.");
-
     const finalInstruction =
       instruction.trim() ||
       "Improve all visible text. Keep meaning the same, make it clean and professional.";
-
     setError("");
     setLoading(true);
     setMode("full");
     setOutputHtml("");
     setReplacements([]);
     setModifiedHtml("");
-
     try {
       const res = await axios.post(
         `${API_BASE}/api/rewrite`,
-        getPayload({
-          html: htmlInput,
-          instruction: finalInstruction,
-        })
+        getPayload({ html: htmlInput, instruction: finalInstruction }),
       );
-
       setOutputHtml(res.data.html || res.data.updatedHtml || "");
       setReplacements(res.data.replacements || []);
       setOriginalWordCount(res.data.originalWordCount || 0);
@@ -149,7 +136,6 @@ export default function App() {
 
   const handleContentOnly = async () => {
     if (!htmlInput.trim()) return setError("Please paste some HTML first.");
-
     setError("");
     setLoadingContent(true);
     setMode("content");
@@ -157,33 +143,24 @@ export default function App() {
     setReplacements([]);
     setModifiedHtml("");
     setContentOutTab("diff");
-
     try {
       let nodes = textNodes;
-
       if (!nodes.length) {
         const pr = await axios.post(`${API_BASE}/api/preview`, {
           html: htmlInput,
         });
-
         nodes = pr.data.textNodes || [];
         setTextNodes(nodes);
         setTextNodeCount(pr.data.count);
         setOriginalWordCount(pr.data.wordCount ?? countWords(nodes));
       }
-
       const finalInstruction =
         instruction.trim() ||
         "Improve all visible text. Keep meaning the same, make it clean and professional.";
-
       const res = await axios.post(
         `${API_BASE}/api/content-only`,
-        getPayload({
-          html: htmlInput,
-          instruction: finalInstruction,
-        })
+        getPayload({ html: htmlInput, instruction: finalInstruction }),
       );
-
       setReplacements(res.data.replacements || []);
       setModifiedHtml(res.data.updatedHtml || res.data.html || "");
       setOriginalWordCount(res.data.originalWordCount || 0);
@@ -198,13 +175,11 @@ export default function App() {
   const ensureModifiedHtml = async () => {
     if (modifiedHtml) return modifiedHtml;
     setLoadingDownload(true);
-
     try {
       const res = await axios.post(`${API_BASE}/api/download`, {
         html: htmlInput,
         replacements,
       });
-
       const html = res.data.html || res.data.updatedHtml || "";
       setModifiedHtml(html);
       return html;
@@ -220,7 +195,6 @@ export default function App() {
     setContentOutTab("html");
     await ensureModifiedHtml();
   };
-
   const handleShowUpdatedPreview = async () => {
     setContentOutTab("preview");
     await ensureModifiedHtml();
@@ -229,7 +203,6 @@ export default function App() {
   const handleDownloadModified = async () => {
     const html = modifiedHtml || (await ensureModifiedHtml());
     if (!html) return;
-
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -242,7 +215,6 @@ export default function App() {
   const handleCopyModified = async () => {
     const html = modifiedHtml || (await ensureModifiedHtml());
     if (!html) return;
-
     navigator.clipboard.writeText(html);
     setCopiedModified(true);
     setTimeout(() => setCopiedModified(false), 2000);
@@ -251,7 +223,6 @@ export default function App() {
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (ev) => {
       setHtmlInput(ev.target.result);
@@ -281,7 +252,6 @@ export default function App() {
   };
 
   const isLoading = loading || loadingContent;
-
   const showCopyDownload =
     mode === "content" &&
     (contentOutTab === "html" || contentOutTab === "preview") &&
@@ -289,17 +259,20 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* HEADER */}
       <header className="header">
         <div className="logo">
-          ⚡ WebContent<span>AI</span>
+          <div className="logo-icon">⚡</div>
+          WebContent<span>AI</span>
         </div>
         <div className="badge-gpt">GPT-4o Powered</div>
       </header>
 
+      {/* HERO */}
       <section className="hero">
         <div className="hero-label">AI HTML Content Editor</div>
         <h1>
-          Rewrite Website Content <span>Instantly</span>
+          Rewrite Website Content <em>Instantly</em>
         </h1>
         <p>
           Paste HTML · Give instruction · Get AI-rewritten text · No tags
@@ -307,11 +280,12 @@ export default function App() {
         </p>
       </section>
 
+      {/* WORKSPACE */}
       <div className="workspace">
+        {/* LEFT PANEL — INPUT */}
         <div className="panel">
           <div className="panel-top">
-            <span className="ptitle">📄 Input HTML</span>
-
+            <span className="ptitle">Input HTML</span>
             <div className="panel-btns">
               <button
                 className="icobtn"
@@ -319,7 +293,6 @@ export default function App() {
               >
                 📂 Upload
               </button>
-
               <button
                 className="icobtn red"
                 onClick={() => {
@@ -331,9 +304,8 @@ export default function App() {
                   setMode(null);
                 }}
               >
-                🗑
+                🗑 Clear
               </button>
-
               <input
                 ref={fileRef}
                 type="file"
@@ -351,7 +323,6 @@ export default function App() {
             >
               Code
             </button>
-
             <button
               className={`tabbtn ${tab === "preview" ? "active" : ""}`}
               onClick={() => setTab("preview")}
@@ -388,34 +359,35 @@ export default function App() {
             >
               {previewing ? "⏳ Analyzing..." : "🔍 Analyze"}
             </button>
-
             {textNodeCount !== null && (
               <>
-                <span className="ntag">{textNodeCount} text nodes found</span>
+                <span className="ntag">{textNodeCount} nodes</span>
                 <span className="ntag green">{wordCount} words</span>
               </>
             )}
           </div>
         </div>
 
+        {/* CENTER COLUMN */}
         <div className="midcol">
           <div className="instrcard">
             <label className="instrlabel">
-              ✏️ Your Instruction{" "}
+              Instruction&nbsp;
               <span
                 style={{
-                  fontSize: "0.6rem",
-                  color: "var(--accent3)",
-                  marginLeft: "6px",
+                  color: "var(--text3)",
+                  fontWeight: 400,
+                  textTransform: "none",
+                  letterSpacing: 0,
                 }}
               >
-                optional
+                — optional
               </span>
             </label>
 
             <textarea
               className="instrbox"
-              placeholder="Optional: e.g. Translate to Hindi... (leave empty to auto-improve)"
+              placeholder="e.g. Translate to Hindi... (leave empty to auto-improve)"
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
             />
@@ -427,7 +399,6 @@ export default function App() {
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
               />
-
               <input
                 className="keyword-count-input"
                 type="number"
@@ -450,11 +421,10 @@ export default function App() {
             </div>
 
             <div className="keyword-help">
-              Optional: keyword count + total target words set kar sakte ho.
+              Keyword count + target word limit set kar sakte ho
             </div>
 
-            <div className="ex-label">⚡ Quick examples</div>
-
+            <div className="ex-label">Quick examples</div>
             <div className="exlist">
               {EXAMPLES.map((ex) => (
                 <button
@@ -481,7 +451,6 @@ export default function App() {
                   <>✨ Rewrite Full HTML</>
                 )}
               </button>
-
               <button
                 className="btn-content"
                 onClick={handleContentOnly}
@@ -506,50 +475,49 @@ export default function App() {
                 <div className="snum">{replacements.length}</div>
                 <div className="slbl">Nodes</div>
               </div>
-
               <div className="sstat">
                 <div className="snum">{originalWordCount}</div>
-                <div className="slbl">Before Words</div>
+                <div className="slbl">Before</div>
               </div>
-
               <div className="sstat">
                 <div className="snum">{wordCount}</div>
-                <div className="slbl">After Words</div>
+                <div className="slbl">After</div>
               </div>
-
               <div className="sstat">
-                <div className="snum">{mode === "full" ? "Full" : "Text"}</div>
+                <div
+                  className="snum"
+                  style={{ fontSize: "1rem", paddingTop: "6px" }}
+                >
+                  {mode === "full" ? "Full" : "Text"}
+                </div>
                 <div className="slbl">Mode</div>
               </div>
             </div>
           )}
         </div>
 
+        {/* RIGHT PANEL — OUTPUT */}
         <div className="panel">
           <div className="panel-top">
             <span className="ptitle">
-              {mode === "content" ? "📝 Content Changes" : "🖥 Output HTML"}
+              {mode === "content" ? "Content Changes" : "Output HTML"}
             </span>
-
             <div className="panel-btns">
               {outputHtml && mode === "full" && (
                 <>
                   <button className="icobtn" onClick={handleCopy}>
                     {copied ? "✅" : "📋 Copy"}
                   </button>
-
                   <button className="icobtn" onClick={handleDownload}>
                     💾 Download
                   </button>
                 </>
               )}
-
               {showCopyDownload && (
                 <>
                   <button className="icobtn green" onClick={handleCopyModified}>
                     {copiedModified ? "✅ Copied!" : "📋 Copy HTML"}
                   </button>
-
                   <button className="icobtn" onClick={handleDownloadModified}>
                     💾 Download
                   </button>
@@ -562,44 +530,34 @@ export default function App() {
             <>
               <div className="tabrow">
                 <button
-                  className={`tabbtn ${
-                    contentOutTab === "diff" ? "active" : ""
-                  }`}
+                  className={`tabbtn ${contentOutTab === "diff" ? "active" : ""}`}
                   onClick={() => setContentOutTab("diff")}
                 >
-                  🔀 Changes
+                  Changes
                 </button>
-
                 <button
-                  className={`tabbtn ${
-                    contentOutTab === "html" ? "active" : ""
-                  }`}
+                  className={`tabbtn ${contentOutTab === "html" ? "active" : ""}`}
                   onClick={handleShowUpdatedHtml}
                 >
-                  🖥 Updated HTML
+                  Updated HTML
                 </button>
-
                 <button
-                  className={`tabbtn ${
-                    contentOutTab === "preview" ? "active" : ""
-                  }`}
+                  className={`tabbtn ${contentOutTab === "preview" ? "active" : ""}`}
                   onClick={handleShowUpdatedPreview}
                 >
-                  👁 Preview
+                  Preview
                 </button>
               </div>
 
               {contentOutTab === "diff" && (
                 <div className="difftable">
                   <div className="diffhead">
-                    <span>Original Text</span>
+                    <span>Original</span>
                     <span>AI Rewritten</span>
                   </div>
-
                   <div className="diffbody">
                     {replacements.map((r) => {
                       const orig = textNodes.find((n) => n.id === r.id);
-
                       return (
                         <div className="diffrow" key={r.id}>
                           <div className="dcell old">{orig?.text || "—"}</div>
@@ -613,7 +571,9 @@ export default function App() {
 
               {contentOutTab === "html" &&
                 (loadingDownload ? (
-                  <div className="loading-html">⏳ Building updated HTML…</div>
+                  <div className="loading-html">
+                    <span className="spinner dark" /> Building HTML…
+                  </div>
                 ) : (
                   <textarea
                     className="codebox"
@@ -627,7 +587,9 @@ export default function App() {
 
               {contentOutTab === "preview" &&
                 (loadingDownload ? (
-                  <div className="loading-html">⏳ Building preview…</div>
+                  <div className="loading-html">
+                    <span className="spinner dark" /> Building preview…
+                  </div>
                 ) : (
                   <iframe
                     className="previewbox"
@@ -640,12 +602,11 @@ export default function App() {
               <div className="panel-foot">
                 {contentOutTab === "html" && modifiedHtml && (
                   <button className="copy-all-btn" onClick={handleCopyModified}>
-                    {copiedModified ? "✅ Copied!" : "📋 Copy All HTML"}
+                    {copiedModified ? "✅ Copied!" : "📋 Copy All"}
                   </button>
                 )}
-
                 <span className="ntag green">
-                  ✅ {replacements.length} changes applied
+                  ✅ {replacements.length} changes
                 </span>
                 <span className="ntag">{wordCount} words</span>
               </div>
@@ -659,11 +620,8 @@ export default function App() {
                 >
                   Code
                 </button>
-
                 <button
-                  className={`tabbtn ${
-                    outputTab === "preview" ? "active" : ""
-                  }`}
+                  className={`tabbtn ${outputTab === "preview" ? "active" : ""}`}
                   onClick={() => setOutputTab("preview")}
                 >
                   Preview
@@ -704,7 +662,9 @@ export default function App() {
         </div>
       </div>
 
-      <footer className="footer">WebContentAI © 2025 — OpenAI GPT-4o</footer>
+      <footer className="footer">
+        WebContentAI © 2025 — Powered by OpenAI GPT-4o
+      </footer>
     </div>
   );
 }

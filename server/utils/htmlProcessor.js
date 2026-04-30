@@ -8,7 +8,7 @@ const BLOCKED_TAGS = new Set([
   "meta",
   "link",
   "head",
-  "title",
+  // ✅ "title" HATAYA — ab <title> tag ka text bhi extract hoga
   "svg",
   "canvas",
   "iframe",
@@ -16,33 +16,12 @@ const BLOCKED_TAGS = new Set([
   "embed",
 ]);
 
-const INLINE_TAGS = new Set([
-  "a",
-  "strong",
-  "b",
-  "em",
-  "i",
-  "span",
-  "small",
-  "mark",
-  "u",
-]);
-
-function isFullHtmlDocument(html) {
-  return /<!doctype\s+html/i.test(html) || /<html[\s>]/i.test(html);
-}
-
 function countWords(text = "") {
   return String(text).trim().split(/\s+/).filter(Boolean).length;
 }
 
-function extractTextNodes(html) {
-  const fullDocument = isFullHtmlDocument(html);
-
-  const $ = cheerio.load(html, {
-    decodeEntities: false,
-    xmlMode: false,
-  });
+function extractTextNodes(html = "") {
+  const $ = cheerio.load(html, { decodeEntities: false }, false);
 
   const textNodes = [];
   let idCounter = 0;
@@ -57,22 +36,29 @@ function extractTextNodes(html) {
 
           if (trimmedText.length > 1) {
             const id = `node-${idCounter++}`;
-
-            const span = $("<span></span>")
-              .attr("data-wcid", id)
-              .text(originalText);
-
-            $(this).replaceWith(span);
-
-            textNodes.push({
-              id,
-              text: trimmedText,
-            });
+            this.data = `__WCID_${id}__`;
+            textNodes.push({ id, text: trimmedText });
           }
         } else if (this.type === "tag") {
           const tagName = (this.name || "").toLowerCase();
 
           if (!BLOCKED_TAGS.has(tagName)) {
+            // ✅ Alt attribute extract karo
+            const altText = $(this).attr("alt");
+            if (typeof altText === "string" && altText.trim().length > 1) {
+              const id = `node-${idCounter++}`;
+              $(this).attr("alt", `__WCID_${id}__`);
+              textNodes.push({ id, text: altText.trim() });
+            }
+
+            // ✅ Title attribute extract karo (tooltip wala, <title> tag nahi)
+            const titleAttr = $(this).attr("title");
+            if (typeof titleAttr === "string" && titleAttr.trim().length > 1) {
+              const id = `node-${idCounter++}`;
+              $(this).attr("title", `__WCID_${id}__`);
+              textNodes.push({ id, text: titleAttr.trim() });
+            }
+
             walk(this);
           }
         }
@@ -81,11 +67,27 @@ function extractTextNodes(html) {
 
   walk($.root());
 
-  return {
-    $,
-    textNodes,
-    fullDocument,
-  };
+  return { $, textNodes };
+}
+
+function escapeHtmlText(text = "") {
+  return String(text)
+    .replace(/<\/?[^>]+>/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function removeWrapperTags(html = "") {
+  return String(html)
+    .replace(/<html[^>]*>/gi, "")
+    .replace(/<\/html>/gi, "")
+    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, "")
+    .replace(/<head[^>]*>/gi, "")
+    .replace(/<\/head>/gi, "")
+    .replace(/<body[^>]*>/gi, "")
+    .replace(/<\/body>/gi, "")
+    .trim();
 }
 
 function applyReplacements($, replacements = []) {
@@ -97,38 +99,19 @@ function applyReplacements($, replacements = []) {
     }
   }
 
-  $("[data-wcid]").each(function () {
-    const id = $(this).attr("data-wcid");
+  let output = $.root().html() || "";
 
-    let newText = Object.prototype.hasOwnProperty.call(map, id)
-      ? map[id]
-      : $(this).text();
+  for (const [id, text] of Object.entries(map)) {
+    output = output
+      .split(`__WCID_${id}__`)
+      .join(escapeHtmlText(text));
+  }
 
-    const prev = this.prev;
-    const next = this.next;
+  // ✅ Leftover markers hatao — alt/title markers bhi
+  output = output.replace(/__WCID_node-\d+__/g, "");
+  output = removeWrapperTags(output);
 
-    const prevIsInlineTag =
-      prev &&
-      prev.type === "tag" &&
-      INLINE_TAGS.has((prev.name || "").toLowerCase());
-
-    const nextIsInlineTag =
-      next &&
-      next.type === "tag" &&
-      INLINE_TAGS.has((next.name || "").toLowerCase());
-
-    if (prevIsInlineTag && !newText.startsWith(" ")) {
-      newText = " " + newText;
-    }
-
-    if (nextIsInlineTag && !newText.endsWith(" ")) {
-      newText = newText + " ";
-    }
-
-    $(this).replaceWith(newText);
-  });
-
-  return $.html();
+  return output;
 }
 
 module.exports = {
