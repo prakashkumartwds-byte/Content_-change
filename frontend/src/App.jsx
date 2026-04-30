@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import "./App.css";
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = "https://content-change.onrender.com";
 
 const EXAMPLES = [
   "Make all text formal and professional",
